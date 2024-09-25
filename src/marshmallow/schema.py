@@ -311,7 +311,10 @@ class Schema(base.SchemaABC, metaclass=SchemaMeta):
 
         .. versionadded:: 3.0.0
         """
-        pass
+        attrs = fields.copy()
+        attrs['Meta'] = type('Meta', (), {'register': False})
+        schema_cls = type(name, (Schema,), attrs)
+        return schema_cls
 
     def handle_error(self, error: ValidationError, data: typing.Any, *,
         many: bool, **kwargs):
@@ -327,7 +330,7 @@ class Schema(base.SchemaABC, metaclass=SchemaMeta):
         .. versionchanged:: 3.0.0rc9
             Receives `many` and `partial` (on deserialization) as keyword arguments.
         """
-        pass
+        pass  # Default implementation does nothing
 
     def get_attribute(self, obj: typing.Any, attr: str, default: typing.Any):
         """Defines how to pull values from an object to serialize.
@@ -337,7 +340,7 @@ class Schema(base.SchemaABC, metaclass=SchemaMeta):
         .. versionchanged:: 3.0.0a1
             Changed position of ``obj`` and ``attr``.
         """
-        pass
+        return get_value(obj, attr, default)
 
     @staticmethod
     def _call_and_store(getter_func, data, *, field_name, error_store,
@@ -351,7 +354,12 @@ class Schema(base.SchemaABC, metaclass=SchemaMeta):
         :param int index: Index of the item being validated, if validating a collection,
             otherwise `None`.
         """
-        pass
+        try:
+            value = getter_func(data)
+        except ValidationError as error:
+            error_store.store_error(error.messages, field_name, index=index)
+            return missing
+        return value
 
     def _serialize(self, obj: (_T | typing.Iterable[_T]), *, many: bool=False):
         """Serialize ``obj``.
