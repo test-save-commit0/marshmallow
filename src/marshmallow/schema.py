@@ -27,7 +27,12 @@ def _get_fields(attrs):
 
     :param attrs: Mapping of class attributes
     """
-    pass
+    fields = [
+        (field_name, field_obj)
+        for field_name, field_obj in attrs.items()
+        if isinstance(field_obj, ma_fields.Field)
+    ]
+    return fields
 
 
 def _get_fields_by_mro(klass):
@@ -37,7 +42,13 @@ def _get_fields_by_mro(klass):
 
     :param type klass: Class whose fields to retrieve
     """
-    pass
+    fields = []
+    for base_class in klass.__mro__[1:]:  # skip the class itself
+        if hasattr(base_class, '_declared_fields'):
+            fields += list(base_class._declared_fields.items())
+        else:
+            fields += _get_fields(base_class.__dict__)
+    return fields
 
 
 class SchemaMeta(ABCMeta):
@@ -83,7 +94,16 @@ class SchemaMeta(ABCMeta):
         :param inherited_fields: Inherited fields.
         :param dict_cls: dict-like class to use for dict output Default to ``dict``.
         """
-        pass
+        declared_fields = dict_cls()
+        for field_name, field_obj in inherited_fields + cls_fields:
+            if field_name in klass.opts.exclude:
+                continue
+            if field_name in declared_fields:
+                prev_obj = declared_fields[field_name]
+                if hasattr(prev_obj, 'resolve_field_instance'):
+                    field_obj = prev_obj.resolve_field_instance(field_obj)
+            declared_fields[field_name] = field_obj
+        return declared_fields
 
     def __init__(cls, name, bases, attrs):
         super().__init__(name, bases, attrs)
@@ -97,7 +117,13 @@ class SchemaMeta(ABCMeta):
         By doing this after constructing the class, we let standard inheritance
         do all the hard work.
         """
-        pass
+        hooks = defaultdict(list)
+        for attr_name in dir(cls):
+            attr = getattr(cls, attr_name)
+            if hasattr(attr, '__marshmallow_hook__'):
+                hook = getattr(attr, '__marshmallow_hook__')
+                hooks[hook.tag].append(attr_name)
+        return dict(hooks)
 
 
 class SchemaOpts:
@@ -311,7 +337,10 @@ class Schema(base.SchemaABC, metaclass=SchemaMeta):
 
         .. versionadded:: 3.0.0
         """
-        pass
+        attrs = fields.copy()
+        attrs['Meta'] = type('Meta', (), {'register': False})
+        schema_cls = type(name, (cls,), attrs)
+        return schema_cls
 
     def handle_error(self, error: ValidationError, data: typing.Any, *,
         many: bool, **kwargs):
@@ -327,7 +356,7 @@ class Schema(base.SchemaABC, metaclass=SchemaMeta):
         .. versionchanged:: 3.0.0rc9
             Receives `many` and `partial` (on deserialization) as keyword arguments.
         """
-        pass
+        pass  # Default implementation does nothing
 
     def get_attribute(self, obj: typing.Any, attr: str, default: typing.Any):
         """Defines how to pull values from an object to serialize.
@@ -337,7 +366,7 @@ class Schema(base.SchemaABC, metaclass=SchemaMeta):
         .. versionchanged:: 3.0.0a1
             Changed position of ``obj`` and ``attr``.
         """
-        pass
+        return get_value(obj, attr, default)
 
     @staticmethod
     def _call_and_store(getter_func, data, *, field_name, error_store,
