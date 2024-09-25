@@ -105,6 +105,20 @@ class URL(Validator):
                 self._memoized[key] = self._regex_generator(relative,
                     absolute, require_tld)
             return self._memoized[key]
+
+        def _regex_generator(self, relative: bool, absolute: bool, require_tld: bool
+            ) ->typing.Pattern:
+            return re.compile(
+                r"".join([
+                    r"^",
+                    r"(" if relative else r"",
+                    r"(?:[a-z0-9\.\-\+]*)://" if absolute else r"",
+                    r"(?:[^/:]+)" if not require_tld else r"(?:[^/:]+\.)+[^/:]{2,}",
+                    r"(?::\d+)?(?:/?|[/?]\S+)$",
+                    r")?" if relative else r"",
+                ]),
+                re.IGNORECASE
+            )
     _regex = RegexMemoizer()
     default_message = 'Not a valid URL.'
     default_schemes = {'http', 'https', 'ftp', 'ftps'}
@@ -419,7 +433,15 @@ class OneOf(Validator):
             of an attribute of the choice objects. Defaults to `str()`
             or `str()`.
         """
-        pass
+        if callable(valuegetter):
+            getter = valuegetter
+        elif isinstance(valuegetter, str):
+            getter = attrgetter(valuegetter)
+        else:
+            getter = str
+
+        for choice, label in zip_longest(self.choices, self.labels):
+            yield getter(choice), label or str(choice)
 
 
 class ContainsOnly(OneOf):
