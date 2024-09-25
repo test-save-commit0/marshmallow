@@ -84,7 +84,13 @@ def validates(field_name: str) ->Callable[..., Any]:
 
     :param str field_name: Name of the field that the method validates.
     """
-    pass
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(self, value, **kwargs):
+            return fn(self, value, **kwargs)
+        wrapper.__marshmallow_hook__ = {VALIDATES: field_name}
+        return wrapper
+    return decorator
 
 
 def validates_schema(fn: (Callable[..., Any] | None)=None, pass_many: bool=
@@ -109,7 +115,25 @@ def validates_schema(fn: (Callable[..., Any] | None)=None, pass_many: bool=
         ``partial`` and ``many`` are always passed as keyword arguments to
         the decorated method.
     """
-    pass
+    if fn is None:
+        return functools.partial(
+            validates_schema,
+            pass_many=pass_many,
+            pass_original=pass_original,
+            skip_on_field_errors=skip_on_field_errors,
+        )
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        return fn(*args, **kwargs)
+
+    wrapper.__marshmallow_hook__ = {
+        (VALIDATES_SCHEMA, pass_many): {
+            'pass_original': pass_original,
+            'skip_on_field_errors': skip_on_field_errors,
+        }
+    }
+    return wrapper
 
 
 def pre_dump(fn: (Callable[..., Any] | None)=None, pass_many: bool=False
@@ -124,7 +148,7 @@ def pre_dump(fn: (Callable[..., Any] | None)=None, pass_many: bool=False
     .. versionchanged:: 3.0.0
         ``many`` is always passed as a keyword arguments to the decorated method.
     """
-    pass
+    return set_hook(fn, (PRE_DUMP, pass_many))
 
 
 def post_dump(fn: (Callable[..., Any] | None)=None, pass_many: bool=False,
@@ -142,7 +166,7 @@ def post_dump(fn: (Callable[..., Any] | None)=None, pass_many: bool=False,
     .. versionchanged:: 3.0.0
         ``many`` is always passed as a keyword arguments to the decorated method.
     """
-    pass
+    return set_hook(fn, (POST_DUMP, pass_many), pass_original=pass_original)
 
 
 def pre_load(fn: (Callable[..., Any] | None)=None, pass_many: bool=False
@@ -158,7 +182,7 @@ def pre_load(fn: (Callable[..., Any] | None)=None, pass_many: bool=False
         ``partial`` and ``many`` are always passed as keyword arguments to
         the decorated method.
     """
-    pass
+    return set_hook(fn, (PRE_LOAD, pass_many))
 
 
 def post_load(fn: (Callable[..., Any] | None)=None, pass_many: bool=False,
@@ -177,7 +201,7 @@ def post_load(fn: (Callable[..., Any] | None)=None, pass_many: bool=False,
         ``partial`` and ``many`` are always passed as keyword arguments to
         the decorated method.
     """
-    pass
+    return set_hook(fn, (POST_LOAD, pass_many), pass_original=pass_original)
 
 
 def set_hook(fn: (Callable[..., Any] | None), key: (tuple[str, bool] | str),
@@ -192,4 +216,11 @@ def set_hook(fn: (Callable[..., Any] | None), key: (tuple[str, bool] | str),
     :return: Decorated function if supplied, else this decorator with its args
         bound.
     """
-    pass
+    def decorator(func):
+        func.__marshmallow_hook__ = {key: kwargs or True}
+        return func
+
+    if fn is None:
+        return decorator
+    else:
+        return decorator(fn)
